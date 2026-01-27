@@ -859,12 +859,10 @@ function monthsBetween(startISO, endISO){
 async function mpFetchPrices(){
   try{
     setMPStatus('Koersen ophalen…');
-    const { items, map } = buildQuoteItems(myp.holdings);
-    const res = await apiJSON(`/api/quotes?items=${encodeURIComponent(items.join(','))}`);
+    const res = await fetchPricesForHoldings(myp.holdings);
     const merged = {...(myp.prices || {})};
     for(const [k,v] of Object.entries(res.prices||{})){
-      const orig = map[String(k).toUpperCase()] || String(k).toUpperCase();
-      merged[orig] = v;
+      merged[String(k).toUpperCase()] = v;
     }
     myp.prices = merged;
     setMPStatus(`Koersen opgehaald (${Object.keys(myp.prices).length} items).`);
