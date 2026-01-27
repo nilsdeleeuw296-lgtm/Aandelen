@@ -239,14 +239,35 @@ function parseStooqQuoteCSV(csv) {
   const headerIdx = raw.indexOf('Symbol,Date');
   const normalized = (headerIdx >= 0) ? raw.slice(headerIdx) : raw;
   const lines = normalized.trim().split(/\r?\n/);
-  if (lines.length < 2) return null;
-  const header = lines[0].split(',');
-  const row = lines[1].split(',');
-  const map = {};
-  header.forEach((h, i) => map[h.trim().toLowerCase()] = row[i]);
-  const close = Number(map['close']);
-  if (!isFinite(close)) return null;
-  return { symbol: map['symbol'], date: map['date'], time: map['time'], close };
+  if (!lines.length) return null;
+
+  const first = lines[0].split(',');
+  const hasHeader = first[0] && first[0].trim().toLowerCase() === 'symbol';
+  const row = hasHeader ? (lines[1] || '').split(',') : first;
+
+  if (hasHeader) {
+    const header = first;
+    const map = {};
+    header.forEach((h, i) => map[h.trim().toLowerCase()] = row[i]);
+    const close = Number(map['close']);
+    if (!isFinite(close)) return null;
+    return { symbol: map['symbol'], date: map['date'], time: map['time'], close };
+  }
+
+  // Stooq quote CSV often returns a single row without headers:
+  // SYMBOL,DATE,TIME,OPEN,HIGH,LOW,CLOSE,VOLUME
+  if (row.length >= 7) {
+    const close = Number(row[6]);
+    if (!isFinite(close)) return null;
+    return {
+      symbol: row[0],
+      date: row[1],
+      time: row[2],
+      close,
+    };
+  }
+
+  return null;
 }
 
 function parseStooqHistoryCSV(csv) {
