@@ -868,6 +868,8 @@ let autoRefreshIntervalSec = 5;
 let renderTimer = null;
 let lastBuilderUpdate = null;
 let lastMyPortfolioUpdate = null;
+let autoRefreshPaused = false;
+let autoRefreshErrorCount = 0;
 
 function formatTimeHHMM(){
   const d = new Date();
@@ -882,6 +884,16 @@ function formatDateShort(iso){
 function setQuotesLastUpdated(text){
   const el = $('qLastUpdated');
   if(el) el.textContent = text;
+}
+
+function showToast(message){
+  const el = $('toast');
+  if(!el) return;
+  el.textContent = message;
+  el.classList.remove('hidden');
+  clearTimeout(el.dataset.timerId);
+  const timerId = setTimeout(()=> el.classList.add('hidden'), 3500);
+  el.dataset.timerId = String(timerId);
 }
 
 function setAutoRefreshEnabled(enabled){
@@ -938,6 +950,7 @@ async function mpFetchPrices(){
 async function autoRefreshPrices(){
   const settings = loadSettings();
   if(!settings.autoRefreshEnabled) return;
+  if(autoRefreshPaused) return;
   if(autoRefreshInFlight) return;
   autoRefreshInFlight = true;
   try{
@@ -961,9 +974,14 @@ async function autoRefreshPrices(){
     }
     scheduleRenderAll();
     setQuotesLastUpdated(`Auto ${now}`);
+    autoRefreshErrorCount = 0;
   }catch(e){
+    autoRefreshErrorCount += 1;
     setBuilderStatus(`Auto-update fout: ${e.message}.`);
     setMPStatus(`Auto-update fout: ${e.message}.`);
+    if(autoRefreshErrorCount >= 3){
+      showToast('Auto-refresh faalt meerdere keren. Controleer de server of je verbinding.');
+    }
   }finally{
     autoRefreshInFlight = false;
   }
@@ -1921,6 +1939,17 @@ if($('rebGenerate')){
   $('modal').addEventListener('click', (e)=>{ if(e.target.id==='modal') closeModal(); });
   $('histRange').addEventListener('change', ()=> openModal(modalState.ticker));
   $('histScale').addEventListener('change', renderHistoryChart);
+
+  document.addEventListener('focusin', (e)=>{
+    if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.isContentEditable)){
+      autoRefreshPaused = true;
+    }
+  });
+  document.addEventListener('focusout', (e)=>{
+    if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.isContentEditable)){
+      autoRefreshPaused = false;
+    }
+  });
 
   // kick off other renders
   renderQuotesTable();

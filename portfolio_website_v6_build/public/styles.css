@@ -131,3 +131,17 @@ button.secondary:hover{border-color:rgba(255,255,255,.22);background:rgba(255,25
 
 .table input{width:110px;padding:9px 10px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.04);color:var(--text)}
 .table input:focus{outline:none;border-color:rgba(167,139,250,.7);box-shadow:0 0 0 3px rgba(167,139,250,.18)}
+
+.toast{
+  position:fixed;
+  bottom:24px;
+  right:24px;
+  padding:12px 16px;
+  border-radius:14px;
+  background:rgba(15,23,42,.9);
+  border:1px solid rgba(255,255,255,.16);
+  color:var(--text);
+  box-shadow:var(--shadow);
+  z-index:300;
+  font-weight:700;
+}
