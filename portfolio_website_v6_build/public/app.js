@@ -856,6 +856,14 @@ function monthsBetween(startISO, endISO){
   return Math.max(0, months);
 }
 
+let autoRefreshTimer = null;
+let autoRefreshInFlight = false;
+
+function formatTimeHHMM(){
+  const d = new Date();
+  return d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+}
+
 async function mpFetchPrices(){
   try{
     setMPStatus('Koersen ophalen…');
@@ -870,6 +878,37 @@ async function mpFetchPrices(){
     renderMyHoldings();
   }catch(e){
     setMPStatus(`Fout bij ophalen: ${e.message}.`);
+  }
+}
+
+async function autoRefreshPrices(){
+  if(autoRefreshInFlight) return;
+  autoRefreshInFlight = true;
+  try{
+    const now = formatTimeHHMM();
+    if(builder.holdings && builder.holdings.length){
+      const res = await fetchPricesForHoldings(builder.holdings);
+      builder.prices = res.prices || {};
+      setBuilderStatus(`Koersen auto-updated (${Object.keys(builder.prices).length} items) om ${now}. ${res.note || ''}`.trim());
+      renderBuilder();
+    }
+    if(myp.holdings && myp.holdings.length){
+      const res = await fetchPricesForHoldings(myp.holdings);
+      const merged = {...(myp.prices || {})};
+      for(const [k,v] of Object.entries(res.prices||{})){
+        merged[String(k).toUpperCase()] = v;
+      }
+      myp.prices = merged;
+      setMPStatus(`Koersen auto-updated (${Object.keys(myp.prices).length} items) om ${now}.`);
+      saveMyPortfolio();
+      renderMyHoldings();
+    }
+    renderQuotesTable();
+  }catch(e){
+    setBuilderStatus(`Auto-update fout: ${e.message}.`);
+    setMPStatus(`Auto-update fout: ${e.message}.`);
+  }finally{
+    autoRefreshInFlight = false;
   }
 }
 
@@ -1760,6 +1799,10 @@ if($('rebGenerate')){
   renderManualTable();
   renderMyHoldings();
   updateDashboard();
+
+  if(!autoRefreshTimer){
+    autoRefreshTimer = setInterval(autoRefreshPrices, 5000);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
