@@ -1086,7 +1086,7 @@ function drawLineChart(canvas, series, opts){
   ctx.clearRect(0,0,W,H);
 
   // padding
-  const pad = {l:40,r:16,t:12,b:26};
+  const pad = {l:48,r:16,t:14,b:28};
   const x0=pad.l, x1=W-pad.r, y0=pad.t, y1=H-pad.b;
 
   const allY = series.flatMap(s=>s.data.map(p=>p.y));
@@ -1101,8 +1101,20 @@ function drawLineChart(canvas, series, opts){
     return y1 - v*(y1-y0);
   }
 
+  // background grid
+  ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+  ctx.lineWidth = 1;
+  const gridRows = 4;
+  for(let i=0;i<=gridRows;i++){
+    const py = y0 + (y1-y0)*i/gridRows;
+    ctx.beginPath();
+    ctx.moveTo(x0,py);
+    ctx.lineTo(x1,py);
+    ctx.stroke();
+  }
+
   // axes
-  ctx.strokeStyle = '#e5e7eb';
+  ctx.strokeStyle = 'rgba(226,232,240,0.6)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(x0,y0);
@@ -1111,18 +1123,42 @@ function drawLineChart(canvas, series, opts){
   ctx.stroke();
 
   // y ticks
-  ctx.fillStyle = '#6b7280';
-  ctx.font = '12px system-ui';
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px system-ui';
   const ticks = 4;
   for(let i=0;i<=ticks;i++){
     const ty = minY + (maxY-minY)*i/ticks;
     const py = yScale(ty);
-    ctx.strokeStyle = '#f3f4f6';
-    ctx.beginPath();
-    ctx.moveTo(x0,py);
-    ctx.lineTo(x1,py);
-    ctx.stroke();
     ctx.fillText(fmtEUR.format(ty), 6, py+4);
+  }
+
+  // x ticks (year labels)
+  const maxMonths = maxX || 0;
+  const xTicks = 4;
+  ctx.fillStyle = '#94a3b8';
+  for(let i=0;i<=xTicks;i++){
+    const tx = minX + (maxMonths-minX)*i/xTicks;
+    const px = xScale(tx);
+    ctx.fillText(`${Math.round(tx/12)}y`, px-8, y1+18);
+  }
+
+  // area fill for first series
+  if(series[0] && series[0].data.length){
+    const s = series[0];
+    ctx.beginPath();
+    s.data.forEach((p, idx)=>{
+      const px = xScale(p.x);
+      const py = yScale(p.y);
+      if(idx===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    });
+    ctx.lineTo(xScale(maxX), y1);
+    ctx.lineTo(xScale(minX), y1);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, y0, 0, y1);
+    grad.addColorStop(0, 'rgba(148,163,184,0.18)');
+    grad.addColorStop(1, 'rgba(148,163,184,0.02)');
+    ctx.fillStyle = grad;
+    ctx.fill();
   }
 
   // draw series
@@ -1283,7 +1319,7 @@ function renderHistoryChart(){
   const H = canvas.height = canvas.getAttribute('height') ? Number(canvas.getAttribute('height')) : 240;
   ctx.clearRect(0,0,W,H);
 
-  const pad = {l:40,r:16,t:12,b:26};
+  const pad = {l:48,r:16,t:14,b:28};
   const x0=pad.l, x1=W-pad.r, y0=pad.t, y1=H-pad.b;
 
   const ys = data.map(p=>p.y);
@@ -1295,9 +1331,46 @@ function renderHistoryChart(){
   function xs(x){ return x0 + (x-minX)*(x1-x0)/(maxX-minX || 1); }
   function yscl(y){ return y1 - (y-minY)*(y1-y0)/(maxY-minY || 1); }
 
+  // grid
+  ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+  ctx.lineWidth = 1;
+  const gridRows = 4;
+  for(let i=0;i<=gridRows;i++){
+    const py = y0 + (y1-y0)*i/gridRows;
+    ctx.beginPath();
+    ctx.moveTo(x0,py);
+    ctx.lineTo(x1,py);
+    ctx.stroke();
+  }
+
   // axes
-  ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth=1;
+  ctx.strokeStyle = 'rgba(226,232,240,0.6)'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x0,y1); ctx.lineTo(x1,y1); ctx.stroke();
+
+  // y-axis labels (normalized %)
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px system-ui';
+  for(let i=0;i<=4;i++){
+    const ty = minY + (maxY-minY)*i/4;
+    const py = yscl(ty);
+    const v = (scale === 'log') ? Math.exp(ty) : ty;
+    ctx.fillText(`${fmt1.format(v)}%`, 6, py+4);
+  }
+
+  // area fill
+  ctx.beginPath();
+  data.forEach((p,i)=>{
+    const px = xs(p.x), py = yscl(p.y);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  });
+  ctx.lineTo(xs(maxX), y1);
+  ctx.lineTo(xs(minX), y1);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, y0, 0, y1);
+  grad.addColorStop(0, 'rgba(37,99,235,0.25)');
+  grad.addColorStop(1, 'rgba(37,99,235,0.04)');
+  ctx.fillStyle = grad;
+  ctx.fill();
 
   // line
   ctx.strokeStyle = '#2563eb'; ctx.lineWidth=2;
