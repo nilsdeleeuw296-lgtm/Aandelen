@@ -3,7 +3,7 @@ Portfolio Planner v6 (light UI)
 Start (Windows):
 1) Installeer Node.js LTS (als je dit nog niet hebt)
 2) Dubbelklik START_WEBSITE.bat
-3) Browser opent: http://localhost:5174
+3) Browser opent: http://localhost:5174 (refresh als het te vroeg opent)
 
 Belangrijk:
 - Koersen komen via Stooq (primary), Yahoo (fallback) en daarna cache/handmatig.
@@ -11,6 +11,7 @@ Belangrijk:
 
 Troubleshooting:
 - 'node' not recognized: installeer Node.js LTS en herstart.
+- Houd het server-venster open; sluiten = site stopt.
 - 'Not found' op /: zorg dat je http://localhost:5174 gebruikt en niet file://
 
 
