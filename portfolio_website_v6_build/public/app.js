@@ -183,6 +183,7 @@ function loadSettings(){
   const s = readJSON(STORAGE.settings, null) || {};
   if(!s.excludedTags) s.excludedTags = ['DEFENSE','FOSSIL','TOBACCO','GAMBLING'];
   if(typeof s.autoRefreshEnabled !== 'boolean') s.autoRefreshEnabled = true;
+  if(!s.autoRefreshIntervalSec || s.autoRefreshIntervalSec < 5) s.autoRefreshIntervalSec = 5;
   if(typeof s.chartFillEnabled !== 'boolean') s.chartFillEnabled = true;
   return s;
 }
@@ -667,9 +668,11 @@ async function onFetchPrices(){
     setBuilderStatus('Koersen ophalen…');
     const res = await fetchPricesForHoldings(builder.holdings);
     builder.prices = res.prices || {};
-    setBuilderStatus(`Koersen opgehaald (${Object.keys(builder.prices).length} items). ${res.note || ''}`);
-    setQuotesLastUpdated(`Handmatig ${formatTimeHHMM()}`);
-    renderBuilder();
+    const now = formatTimeHHMM();
+    setBuilderStatus(`Koersen opgehaald (${Object.keys(builder.prices).length} items) om ${now}. ${res.note || ''}`.trim());
+    setQuotesLastUpdated(`Handmatig ${now}`);
+    lastBuilderUpdate = now;
+    scheduleRenderAll();
   }catch(e){
     setBuilderStatus(`Fout bij ophalen: ${e.message}. Gebruik manual overrides in Instellingen.`);
   }
@@ -861,6 +864,10 @@ function monthsBetween(startISO, endISO){
 
 let autoRefreshTimer = null;
 let autoRefreshInFlight = false;
+let autoRefreshIntervalSec = 5;
+let renderTimer = null;
+let lastBuilderUpdate = null;
+let lastMyPortfolioUpdate = null;
 
 function formatTimeHHMM(){
   const d = new Date();
@@ -880,12 +887,32 @@ function setQuotesLastUpdated(text){
 function setAutoRefreshEnabled(enabled){
   if(enabled){
     if(!autoRefreshTimer){
-      autoRefreshTimer = setInterval(autoRefreshPrices, 5000);
+      autoRefreshTimer = setInterval(autoRefreshPrices, autoRefreshIntervalSec * 1000);
     }
   }else if(autoRefreshTimer){
     clearInterval(autoRefreshTimer);
     autoRefreshTimer = null;
   }
+}
+
+function setAutoRefreshInterval(seconds){
+  const next = Math.max(5, Number(seconds) || 5);
+  autoRefreshIntervalSec = next;
+  if(autoRefreshTimer){
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = setInterval(autoRefreshPrices, autoRefreshIntervalSec * 1000);
+  }
+}
+
+function scheduleRenderAll(){
+  if(renderTimer) return;
+  renderTimer = setTimeout(() => {
+    renderBuilder();
+    renderMyHoldings();
+    renderQuotesTable();
+    updateDashboard();
+    renderTimer = null;
+  }, 300);
 }
 
 async function mpFetchPrices(){
@@ -897,8 +924,10 @@ async function mpFetchPrices(){
       merged[String(k).toUpperCase()] = v;
     }
     myp.prices = merged;
-    setMPStatus(`Koersen opgehaald (${Object.keys(myp.prices).length} items).`);
-    setQuotesLastUpdated(`Handmatig ${formatTimeHHMM()}`);
+    const now = formatTimeHHMM();
+    setMPStatus(`Koersen opgehaald (${Object.keys(myp.prices).length} items) om ${now}.`);
+    setQuotesLastUpdated(`Handmatig ${now}`);
+    lastMyPortfolioUpdate = now;
     saveMyPortfolio();
     renderMyHoldings();
   }catch(e){
@@ -917,7 +946,7 @@ async function autoRefreshPrices(){
       const res = await fetchPricesForHoldings(builder.holdings);
       builder.prices = res.prices || {};
       setBuilderStatus(`Koersen auto-updated (${Object.keys(builder.prices).length} items) om ${now}. ${res.note || ''}`.trim());
-      renderBuilder();
+      lastBuilderUpdate = now;
     }
     if(myp.holdings && myp.holdings.length){
       const res = await fetchPricesForHoldings(myp.holdings);
@@ -927,10 +956,10 @@ async function autoRefreshPrices(){
       }
       myp.prices = merged;
       setMPStatus(`Koersen auto-updated (${Object.keys(myp.prices).length} items) om ${now}.`);
+      lastMyPortfolioUpdate = now;
       saveMyPortfolio();
-      renderMyHoldings();
     }
-    renderQuotesTable();
+    scheduleRenderAll();
     setQuotesLastUpdated(`Auto ${now}`);
   }catch(e){
     setBuilderStatus(`Auto-update fout: ${e.message}.`);
@@ -973,6 +1002,7 @@ function regionFilter(sec, region){
 
 async function renderQuotesTable(){
   const region = $('qRegion').value;
+  const statusFilter = $('qStatusFilter') ? $('qStatusFilter').value : 'ALL';
   const tbody = $('tblQuotes').querySelector('tbody');
   tbody.innerHTML = '';
   const manual = loadManualPrices();
@@ -985,9 +1015,13 @@ async function renderQuotesTable(){
     const pMan = manual[s.ticker] ?? null;
     const price = pLive!=null ? pLive : (pMan!=null ? Number(pMan) : null);
     const status = pLive!=null ? (builder.prices[s.ticker]?.status || myp.prices[s.ticker]?.status || 'LIVE') : (pMan!=null ? 'MANUAL' : '—');
-    const tr = document.createElement('tr');
     const tagStr = (s.tags||[]).join('|');
     const muted = (excluded.some(t => (s.tags||[]).includes(t))) ? 'style="opacity:.55"' : '';
+    if(statusFilter !== 'ALL'){
+      if(status === '—' && statusFilter !== 'MISSING') continue;
+      if(status !== '—' && status !== statusFilter) continue;
+    }
+    const tr = document.createElement('tr');
     tr.innerHTML = `
       <td ${muted}><a href="#" class="ticker-link" data-ticker="${s.ticker}">${s.ticker}</a></td>
       <td ${muted}>${s.name}</td>
@@ -1011,12 +1045,13 @@ async function qFetch(){
     const res = await apiJSON(`/api/quotes?tickers=${encodeURIComponent(tickers)}`);
     builder.prices = {...builder.prices, ...(res.prices||{})};
     myp.prices = {...myp.prices, ...(res.prices||{})};
-    $('qStatus').textContent = `Koersen opgehaald (${Object.keys(res.prices||{}).length} items).`;
-    setQuotesLastUpdated(`Handmatig ${formatTimeHHMM()}`);
+    const now = formatTimeHHMM();
+    $('qStatus').textContent = `Koersen opgehaald (${Object.keys(res.prices||{}).length} items) om ${now}.`;
+    setQuotesLastUpdated(`Handmatig ${now}`);
+    lastBuilderUpdate = now;
+    lastMyPortfolioUpdate = now;
     saveBuilder(); saveMyPortfolio();
-    renderQuotesTable();
-    renderBuilder();
-    renderMyHoldings();
+    scheduleRenderAll();
   }catch(e){
     $('qStatus').textContent = `Fout: ${e.message}`;
   }
@@ -1085,6 +1120,17 @@ function renderManualTable(){
       s.autoRefreshEnabled = autoToggle.checked;
       saveSettings(s);
       setAutoRefreshEnabled(s.autoRefreshEnabled);
+    };
+  }
+
+  const intervalInput = $('autoRefreshInterval');
+  if(intervalInput){
+    intervalInput.value = settings.autoRefreshIntervalSec;
+    intervalInput.onchange = () => {
+      const s = loadSettings();
+      s.autoRefreshIntervalSec = Math.max(5, Number(intervalInput.value) || 5);
+      saveSettings(s);
+      setAutoRefreshInterval(s.autoRefreshIntervalSec);
     };
   }
 
@@ -1233,6 +1279,14 @@ function drawLineChart(canvas, series, opts){
     ctx.fillText(`${Math.round(tx/12)}y`, px-8, y1+18);
   }
 
+  if(opts && Array.isArray(opts.xLabels) && opts.xLabels.length){
+    opts.xLabels.forEach(label => {
+      if(!label || label.x == null || !label.text) return;
+      const px = xScale(label.x);
+      ctx.fillText(label.text, px-20, y1+18);
+    });
+  }
+
   const settings = loadSettings();
 
   // area fill for first series
@@ -1283,6 +1337,9 @@ function updateDashboard(){
   $('dashInitial').textContent = fmtEUR.format(builder.initial);
   $('dashMonthly').textContent = fmtEUR.format(builder.monthly);
   $('dashYears').textContent = builder.years;
+  if(lastBuilderUpdate){
+    $('dashScenario').textContent += ` • bijgewerkt ${lastBuilderUpdate}`;
+  }
 
   const proj = projectPortfolio({years: builder.years, risk: builder.risk, initial: builder.initial, monthly: builder.monthly});
   $('kpiEndBase').textContent = fmtEUR.format(proj.base.fv);
@@ -1340,7 +1397,11 @@ if(actualData.length){
   series.push({color:'#f59e0b', data: actualData});
 }
 
-drawLineChart($('profitChart'), series, {point});
+const xLabels = [
+  { x: 0, text: String(new Date().getFullYear()) },
+  { x: builder.years * 12, text: String(new Date().getFullYear() + builder.years) },
+];
+drawLineChart($('profitChart'), series, {point, xLabels});
 }
 
 /** ---------------------------------------------------------
@@ -1830,6 +1891,7 @@ if(btnAdd){
   $('qFetch').addEventListener('click', qFetch);
   $('qClearCache').addEventListener('click', qClearCache);
   $('qRegion').addEventListener('change', renderQuotesTable);
+  if($('qStatusFilter')) $('qStatusFilter').addEventListener('change', renderQuotesTable);
 
 // rebalance
 if($('rebGenerate')){
@@ -1867,7 +1929,9 @@ if($('rebGenerate')){
   renderMyHoldings();
   updateDashboard();
 
-  setAutoRefreshEnabled(loadSettings().autoRefreshEnabled);
+  const settings = loadSettings();
+  setAutoRefreshInterval(settings.autoRefreshIntervalSec);
+  setAutoRefreshEnabled(settings.autoRefreshEnabled);
 }
 
 document.addEventListener('DOMContentLoaded', init);

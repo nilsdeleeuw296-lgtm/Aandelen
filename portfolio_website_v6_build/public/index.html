@@ -403,6 +403,16 @@
               <option value="ETF">ETF’s</option>
             </select>
           </div>
+          <div class="control">
+            <label>Status filter</label>
+            <select id="qStatusFilter">
+              <option value="ALL" selected>Alles</option>
+              <option value="LIVE">Live</option>
+              <option value="CACHED">Cached</option>
+              <option value="MANUAL">Handmatig</option>
+              <option value="MISSING">Ontbreekt</option>
+            </select>
+          </div>
           <div class="control btns">
             <button id="qFetch" class="primary">Haal koersen op</button>
             <button id="qClearCache" class="secondary">Wis cache</button>
@@ -520,6 +530,7 @@
             <p class="muted">Schakel automatische koers-updates en grafiekvulling naar wens in of uit.</p>
             <div class="checklist">
               <label><input type="checkbox" id="autoRefreshToggle"> Auto-refresh koersen (elke 5s)</label>
+              <label>Interval (sec): <input type="number" id="autoRefreshInterval" min="5" max="120" step="5" style="width:90px"></label>
               <label><input type="checkbox" id="chartFillToggle"> Vulling onder grafieken tonen</label>
             </div>
           </div>
