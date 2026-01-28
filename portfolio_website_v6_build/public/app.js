@@ -182,6 +182,8 @@ function getSecurityByTicker(t){
 function loadSettings(){
   const s = readJSON(STORAGE.settings, null) || {};
   if(!s.excludedTags) s.excludedTags = ['DEFENSE','FOSSIL','TOBACCO','GAMBLING'];
+  if(typeof s.autoRefreshEnabled !== 'boolean') s.autoRefreshEnabled = true;
+  if(typeof s.chartFillEnabled !== 'boolean') s.chartFillEnabled = true;
   return s;
 }
 function saveSettings(s){ writeJSON(STORAGE.settings, s); }
@@ -666,6 +668,7 @@ async function onFetchPrices(){
     const res = await fetchPricesForHoldings(builder.holdings);
     builder.prices = res.prices || {};
     setBuilderStatus(`Koersen opgehaald (${Object.keys(builder.prices).length} items). ${res.note || ''}`);
+    setQuotesLastUpdated(`Handmatig ${formatTimeHHMM()}`);
     renderBuilder();
   }catch(e){
     setBuilderStatus(`Fout bij ophalen: ${e.message}. Gebruik manual overrides in Instellingen.`);
@@ -864,6 +867,27 @@ function formatTimeHHMM(){
   return d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDateShort(iso){
+  if(!iso) return '';
+  return String(iso).slice(0, 7);
+}
+
+function setQuotesLastUpdated(text){
+  const el = $('qLastUpdated');
+  if(el) el.textContent = text;
+}
+
+function setAutoRefreshEnabled(enabled){
+  if(enabled){
+    if(!autoRefreshTimer){
+      autoRefreshTimer = setInterval(autoRefreshPrices, 5000);
+    }
+  }else if(autoRefreshTimer){
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+}
+
 async function mpFetchPrices(){
   try{
     setMPStatus('Koersen ophalen…');
@@ -874,6 +898,7 @@ async function mpFetchPrices(){
     }
     myp.prices = merged;
     setMPStatus(`Koersen opgehaald (${Object.keys(myp.prices).length} items).`);
+    setQuotesLastUpdated(`Handmatig ${formatTimeHHMM()}`);
     saveMyPortfolio();
     renderMyHoldings();
   }catch(e){
@@ -882,6 +907,8 @@ async function mpFetchPrices(){
 }
 
 async function autoRefreshPrices(){
+  const settings = loadSettings();
+  if(!settings.autoRefreshEnabled) return;
   if(autoRefreshInFlight) return;
   autoRefreshInFlight = true;
   try{
@@ -904,6 +931,7 @@ async function autoRefreshPrices(){
       renderMyHoldings();
     }
     renderQuotesTable();
+    setQuotesLastUpdated(`Auto ${now}`);
   }catch(e){
     setBuilderStatus(`Auto-update fout: ${e.message}.`);
     setMPStatus(`Auto-update fout: ${e.message}.`);
@@ -984,6 +1012,7 @@ async function qFetch(){
     builder.prices = {...builder.prices, ...(res.prices||{})};
     myp.prices = {...myp.prices, ...(res.prices||{})};
     $('qStatus').textContent = `Koersen opgehaald (${Object.keys(res.prices||{}).length} items).`;
+    setQuotesLastUpdated(`Handmatig ${formatTimeHHMM()}`);
     saveBuilder(); saveMyPortfolio();
     renderQuotesTable();
     renderBuilder();
@@ -1047,6 +1076,29 @@ function renderManualTable(){
       updateDashboard();
     });
   });
+
+  const autoToggle = $('autoRefreshToggle');
+  if(autoToggle){
+    autoToggle.checked = settings.autoRefreshEnabled;
+    autoToggle.onchange = () => {
+      const s = loadSettings();
+      s.autoRefreshEnabled = autoToggle.checked;
+      saveSettings(s);
+      setAutoRefreshEnabled(s.autoRefreshEnabled);
+    };
+  }
+
+  const chartFillToggle = $('chartFillToggle');
+  if(chartFillToggle){
+    chartFillToggle.checked = settings.chartFillEnabled;
+    chartFillToggle.onchange = () => {
+      const s = loadSettings();
+      s.chartFillEnabled = chartFillToggle.checked;
+      saveSettings(s);
+      updateDashboard();
+      renderHistoryChart();
+    };
+  }
 }
 
 function saveManual(){
@@ -1181,8 +1233,10 @@ function drawLineChart(canvas, series, opts){
     ctx.fillText(`${Math.round(tx/12)}y`, px-8, y1+18);
   }
 
+  const settings = loadSettings();
+
   // area fill for first series
-  if(series[0] && series[0].data.length){
+  if(settings.chartFillEnabled && series[0] && series[0].data.length){
     const s = series[0];
     ctx.beginPath();
     s.data.forEach((p, idx)=>{
@@ -1396,20 +1450,33 @@ function renderHistoryChart(){
     ctx.fillText(`${fmt1.format(v)}%`, 6, py+4);
   }
 
-  // area fill
-  ctx.beginPath();
-  data.forEach((p,i)=>{
-    const px = xs(p.x), py = yscl(p.y);
-    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  // x-axis date labels (start/middle/end)
+  ctx.fillStyle = '#94a3b8';
+  const dateTicks = [0, Math.floor(maxX/2), maxX].filter((v, i, arr) => arr.indexOf(v) === i);
+  dateTicks.forEach((idx) => {
+    const px = xs(idx);
+    const label = formatDateShort(dates[idx]);
+    if(label) ctx.fillText(label, px - 22, y1 + 18);
   });
-  ctx.lineTo(xs(maxX), y1);
-  ctx.lineTo(xs(minX), y1);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(0, y0, 0, y1);
-  grad.addColorStop(0, 'rgba(37,99,235,0.25)');
-  grad.addColorStop(1, 'rgba(37,99,235,0.04)');
-  ctx.fillStyle = grad;
-  ctx.fill();
+
+  const settings = loadSettings();
+
+  // area fill
+  if(settings.chartFillEnabled){
+    ctx.beginPath();
+    data.forEach((p,i)=>{
+      const px = xs(p.x), py = yscl(p.y);
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    });
+    ctx.lineTo(xs(maxX), y1);
+    ctx.lineTo(xs(minX), y1);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, y0, 0, y1);
+    grad.addColorStop(0, 'rgba(37,99,235,0.25)');
+    grad.addColorStop(1, 'rgba(37,99,235,0.04)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
 
   // line
   ctx.strokeStyle = '#2563eb'; ctx.lineWidth=2;
@@ -1800,9 +1867,7 @@ if($('rebGenerate')){
   renderMyHoldings();
   updateDashboard();
 
-  if(!autoRefreshTimer){
-    autoRefreshTimer = setInterval(autoRefreshPrices, 5000);
-  }
+  setAutoRefreshEnabled(loadSettings().autoRefreshEnabled);
 }
 
 document.addEventListener('DOMContentLoaded', init);

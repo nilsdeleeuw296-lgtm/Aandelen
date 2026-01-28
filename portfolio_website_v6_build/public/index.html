@@ -411,6 +411,10 @@
             <label>Status</label>
             <div class="status" id="qStatus">—</div>
           </div>
+          <div class="control">
+            <label>Laatst bijgewerkt</label>
+            <div class="status" id="qLastUpdated">—</div>
+          </div>
         </div>
 
         <div class="table-wrap">
@@ -508,6 +512,15 @@
                 <thead><tr><th>Ticker</th><th>Prijs</th><th></th></tr></thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </div>
+
+          <div class="card inner">
+            <h3>Updates & grafieken</h3>
+            <p class="muted">Schakel automatische koers-updates en grafiekvulling naar wens in of uit.</p>
+            <div class="checklist">
+              <label><input type="checkbox" id="autoRefreshToggle"> Auto-refresh koersen (elke 5s)</label>
+              <label><input type="checkbox" id="chartFillToggle"> Vulling onder grafieken tonen</label>
             </div>
           </div>
         </div>
