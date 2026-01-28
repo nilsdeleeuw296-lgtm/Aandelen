@@ -404,6 +404,13 @@
               <option value="ETF">ETF’s</option>
             </select>
           </div>
+          <div class="control" style="min-width:220px;">
+            <label>Bulk tickers</label>
+            <textarea id="qBulkAdd" rows="2" placeholder="bv. MSFT, AAPL, VUAA"></textarea>
+          </div>
+          <div class="control btns">
+            <button id="qBulkAddBtn" class="secondary">Toevoegen</button>
+          </div>
           <div class="control">
             <label>Status filter</label>
             <select id="qStatusFilter">
@@ -438,6 +445,7 @@
                 <th>Type</th>
                 <th>Koers</th>
                 <th>Status</th>
+                <th>Bron/Age</th>
               </tr>
             </thead>
             <tbody></tbody>

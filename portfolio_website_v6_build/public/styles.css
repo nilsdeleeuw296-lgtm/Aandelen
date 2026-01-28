@@ -62,7 +62,7 @@ h2,h3{margin:0 0 10px}
 .controls.compact .control{min-width:160px}
 .control{min-width:180px}
 .control label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700}
-.control input,.control select{
+.control input,.control select,.control textarea{
   width:100%;
   padding:11px 12px;
   border-radius:14px;

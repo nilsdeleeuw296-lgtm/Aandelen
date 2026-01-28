@@ -658,7 +658,7 @@ async function fetchPricesForHoldings(list){
   const out = { prices: {}, note: res.note };
   for(const [k,v] of Object.entries(res.prices||{})){
     const orig = map[String(k).toUpperCase()] || String(k).toUpperCase();
-    out.prices[orig] = v;
+    out.prices[orig] = { ...v, ts: Date.now() };
   }
   return out;
 }
@@ -886,6 +886,14 @@ function setQuotesLastUpdated(text){
   if(el) el.textContent = text;
 }
 
+function formatAge(ts){
+  if(!ts) return '—';
+  const ageSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if(ageSec < 60) return `${ageSec}s`;
+  if(ageSec < 3600) return `${Math.floor(ageSec/60)}m`;
+  return `${Math.floor(ageSec/3600)}h`;
+}
+
 function showToast(message){
   const el = $('toast');
   if(!el) return;
@@ -1029,10 +1037,13 @@ async function renderQuotesTable(){
 
   const list = SECURITIES.filter(s => regionFilter(s, region));
   for(const s of list){
-    const pLive = builder.prices[s.ticker]?.price ?? myp.prices[s.ticker]?.price ?? null;
+    const liveEntry = builder.prices[s.ticker] || myp.prices[s.ticker] || null;
+    const pLive = liveEntry?.price ?? null;
     const pMan = manual[s.ticker] ?? null;
     const price = pLive!=null ? pLive : (pMan!=null ? Number(pMan) : null);
-    const status = pLive!=null ? (builder.prices[s.ticker]?.status || myp.prices[s.ticker]?.status || 'LIVE') : (pMan!=null ? 'MANUAL' : '—');
+    const status = pLive!=null ? (liveEntry?.status || 'LIVE') : (pMan!=null ? 'MANUAL' : '—');
+    const source = pLive!=null ? (liveEntry?.source || '—') : (pMan!=null ? 'manual' : '—');
+    const age = pLive!=null ? formatAge(liveEntry?.ts) : '—';
     const tagStr = (s.tags||[]).join('|');
     const muted = (excluded.some(t => (s.tags||[]).includes(t))) ? 'style="opacity:.55"' : '';
     if(statusFilter !== 'ALL'){
@@ -1047,6 +1058,7 @@ async function renderQuotesTable(){
       <td ${muted}>${s.type}</td>
       <td ${muted}>${price!=null ? fmt2.format(price) : '—'}</td>
       <td ${muted}>${badge(status)}</td>
+      <td ${muted}>${source} · ${age}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -1083,6 +1095,26 @@ async function qClearCache(){
   }catch(e){
     $('qStatus').textContent = `Fout: ${e.message}`;
   }
+}
+
+function bulkAddTickers(){
+  const raw = $('qBulkAdd').value || '';
+  const tickers = raw.split(/[\s,;]+/).map(t => t.trim()).filter(Boolean);
+  if(!tickers.length){
+    $('qStatus').textContent = 'Geen tickers ingevoerd.';
+    return;
+  }
+  let added = 0;
+  tickers.forEach((t)=>{
+    const tt = ensureCustomTicker(t);
+    if(tt) added += 1;
+  });
+  $('qBulkAdd').value = '';
+  setBuilderStatus(`Bulk tickers toegevoegd: ${added}`);
+  $('qStatus').textContent = `Toegevoegd: ${added} tickers.`;
+  renderCustomTickerChips();
+  renderBuilder();
+  renderQuotesTable();
 }
 
 /** ---------------------------------------------------------
@@ -1910,6 +1942,7 @@ if(btnAdd){
   $('qClearCache').addEventListener('click', qClearCache);
   $('qRegion').addEventListener('change', renderQuotesTable);
   if($('qStatusFilter')) $('qStatusFilter').addEventListener('change', renderQuotesTable);
+  if($('qBulkAddBtn')) $('qBulkAddBtn').addEventListener('click', bulkAddTickers);
 
 // rebalance
 if($('rebGenerate')){
