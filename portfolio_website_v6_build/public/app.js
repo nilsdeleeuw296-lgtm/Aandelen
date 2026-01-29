@@ -156,7 +156,60 @@ const SECURITIES = [
   {id:'SHOP', name:'Shopify', ticker:'SHOP', region:'OTHER', type:'STOCK', tags:['GROWTH'], stooq:'shop.us'},
   {id:'MELI', name:'MercadoLibre', ticker:'MELI', region:'OTHER', type:'STOCK', tags:['GROWTH'], stooq:'meli.us'},
   {id:'SE', name:'Sea Ltd', ticker:'SE', region:'OTHER', type:'STOCK', tags:['GROWTH'], stooq:'se.us'},
+
+  // Rare earth / critical minerals
+  {id:'MP', name:'MP Materials', ticker:'MP', region:'US', type:'STOCK', tags:['RARE_EARTH'], stooq:'mp.us'},
+  {id:'REE', name:'Rare Element Resources', ticker:'REE', region:'US', type:'STOCK', tags:['RARE_EARTH'], stooq:'ree.us'},
+  {id:'LYC', name:'Lynas Rare Earths', ticker:'LYC', region:'OTHER', type:'STOCK', tags:['RARE_EARTH'], stooq:'lyc.au'},
+  {id:'AVL', name:'Australian Vanadium', ticker:'AVL', region:'OTHER', type:'STOCK', tags:['RARE_EARTH'], stooq:'avl.au'},
+  {id:'ILM', name:'Iluka Resources', ticker:'ILM', region:'OTHER', type:'STOCK', tags:['RARE_EARTH'], stooq:'ilm.au'},
 ];
+
+const INDUSTRY_BY_TICKER = {
+  VT: 'ETF - Equity',
+  BND: 'ETF - Bonds',
+  SGOV: 'ETF - Cash',
+  VWCE: 'ETF - Equity',
+  VAGF: 'ETF - Bonds',
+  ERNX: 'ETF - Cash',
+  MSFT: 'Technology - Software',
+  AAPL: 'Technology - Hardware',
+  GOOGL: 'Communication - Internet',
+  AMZN: 'Consumer Discretionary - Retail',
+  NVDA: 'Technology - Semis',
+  AMD: 'Technology - Semis',
+  JPM: 'Financials - Banks',
+  PG: 'Consumer Staples',
+  JNJ: 'Healthcare',
+  KO: 'Consumer Staples',
+  V: 'Financials - Payments',
+  MA: 'Financials - Payments',
+  BLK: 'Financials - Asset Mgmt',
+  ASML: 'Technology - Semis',
+  SAP: 'Technology - Software',
+  SIE: 'Industrials',
+  SU: 'Industrials',
+  ADYEN: 'Financials - Payments',
+  NESN: 'Consumer Staples',
+  NOVO: 'Healthcare',
+  AIR: 'Industrials',
+  ALV: 'Financials - Insurance',
+  RHM: 'Industrials - Defense',
+  TSM: 'Technology - Semis',
+  SHOP: 'Technology - Software',
+  MELI: 'Consumer Discretionary - Retail',
+  SE: 'Communication - Internet',
+  MP: 'Materials - Rare Earths',
+  REE: 'Materials - Rare Earths',
+  LYC: 'Materials - Rare Earths',
+  AVL: 'Materials - Rare Earths',
+  ILM: 'Materials - Rare Earths',
+};
+
+function getIndustry(ticker){
+  const t = String(ticker || '').toUpperCase();
+  return INDUSTRY_BY_TICKER[t] || 'Other';
+}
 
 const UPCOMING_CURATED = [
   {ticker:'BLK', name:'BlackRock', region:'US', tags:['QUALITY']},
@@ -1084,6 +1137,7 @@ async function renderQuotesTable(){
   const region = $('qRegion').value;
   const statusFilter = $('qStatusFilter') ? $('qStatusFilter').value : 'ALL';
   const search = $('qSearch') ? $('qSearch').value.trim().toUpperCase() : '';
+  const sortBy = $('qSort') ? $('qSort').value : 'ticker';
   const density = $('qDensity') ? $('qDensity').value : 'compact';
   const tbody = $('tblQuotes').querySelector('tbody');
   const table = $('tblQuotes');
@@ -1097,12 +1151,7 @@ async function renderQuotesTable(){
   const excluded = settings.excludedTags || [];
 
   const list = SECURITIES.filter(s => regionFilter(s, region));
-  for(const s of list){
-    if(search){
-      const needle = search;
-      const hay = `${s.ticker} ${s.name}`.toUpperCase();
-      if(!hay.includes(needle)) continue;
-    }
+  const entries = list.map(s => {
     const liveEntry = builder.prices[s.ticker] || myp.prices[s.ticker] || null;
     const pLive = liveEntry?.price ?? null;
     const pMan = manual[s.ticker] ?? null;
@@ -1110,21 +1159,47 @@ async function renderQuotesTable(){
     const status = pLive!=null ? (liveEntry?.status || 'LIVE') : (pMan!=null ? 'MANUAL' : '—');
     const source = pLive!=null ? (liveEntry?.source || '—') : (pMan!=null ? 'manual' : '—');
     const age = pLive!=null ? formatAge(liveEntry?.ts) : '—';
-    const tagStr = (s.tags||[]).join('|');
-    const muted = (excluded.some(t => (s.tags||[]).includes(t))) ? 'style="opacity:.55"' : '';
-    if(statusFilter !== 'ALL'){
-      if(status === '—' && statusFilter !== 'MISSING') continue;
-      if(status !== '—' && status !== statusFilter) continue;
+    const industry = getIndustry(s.ticker);
+    return { s, price, status, source, age, industry };
+  }).filter(entry => {
+    if(search){
+      const hay = `${entry.s.ticker} ${entry.s.name} ${entry.industry}`.toUpperCase();
+      if(!hay.includes(search)) return false;
     }
+    if(statusFilter !== 'ALL'){
+      if(entry.status === '—' && statusFilter !== 'MISSING') return false;
+      if(entry.status !== '—' && entry.status !== statusFilter) return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    switch(sortBy){
+      case 'name':
+        return a.s.name.localeCompare(b.s.name);
+      case 'industry':
+        return a.industry.localeCompare(b.industry) || a.s.ticker.localeCompare(b.s.ticker);
+      case 'status':
+        return a.status.localeCompare(b.status) || a.s.ticker.localeCompare(b.s.ticker);
+      case 'price':
+        return (b.price || 0) - (a.price || 0);
+      case 'ticker':
+      default:
+        return a.s.ticker.localeCompare(b.s.ticker);
+    }
+  });
+
+  for(const entry of entries){
+    const s = entry.s;
+    const muted = (excluded.some(t => (s.tags||[]).includes(t))) ? 'style="opacity:.55"' : '';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td ${muted}><a href="#" class="ticker-link" data-ticker="${s.ticker}">${s.ticker}</a></td>
       <td ${muted}>${s.name}</td>
       <td ${muted}>${s.region}</td>
       <td ${muted}>${s.type}</td>
-      <td ${muted}>${price!=null ? fmt2.format(price) : '—'}</td>
-      <td ${muted}>${badge(status)}</td>
-      <td ${muted}>${source} · ${age} <button class="secondary qRetry" data-ticker="${s.ticker}" style="padding:4px 8px;border-radius:10px;margin-left:6px">↻</button></td>
+      <td ${muted}>${entry.industry}</td>
+      <td ${muted}>${entry.price!=null ? fmt2.format(entry.price) : '—'}</td>
+      <td ${muted}>${badge(entry.status)}</td>
+      <td ${muted}>${entry.source} · ${entry.age} <button class="secondary qRetry" data-ticker="${s.ticker}" style="padding:4px 8px;border-radius:10px;margin-left:6px">↻</button></td>
     `;
     tbody.appendChild(tr);
   }
@@ -2151,6 +2226,7 @@ if($('builderHoldingsFilter')) $('builderHoldingsFilter').addEventListener('inpu
   $('qClearCache').addEventListener('click', qClearCache);
   $('qRegion').addEventListener('change', renderQuotesTable);
   if($('qStatusFilter')) $('qStatusFilter').addEventListener('change', renderQuotesTable);
+  if($('qSort')) $('qSort').addEventListener('change', renderQuotesTable);
   if($('qBulkAddBtn')) $('qBulkAddBtn').addEventListener('click', bulkAddTickers);
   if($('qSearch')) $('qSearch').addEventListener('input', renderQuotesTable);
   if($('qDensity')) $('qDensity').addEventListener('change', renderQuotesTable);
