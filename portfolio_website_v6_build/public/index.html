@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Portfolio Planner (v6)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">PP</div>
+      <div>
+        <div class="brand-title">Portfolio Planner</div>
+        <div class="brand-sub">Scenario → Inleg → Portefeuille • Koersen via proxy (5174)</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-btn active" data-view="dashboard">Dashboard</button>
+      <button class="nav-btn" data-view="builder">Portfolio Builder</button>
+      <button class="nav-btn" data-view="myportfolio">Eigen portfolio</button>
+      <button class="nav-btn" data-view="rebalance">Rebalance</button>
+      <button class="nav-btn" data-view="quotes">Koersen</button>
+      <button class="nav-btn" data-view="upcoming">Up & Coming</button>
+      <button class="nav-btn" data-view="settings">Instellingen</button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <section id="view-dashboard" class="view">
+      <div class="grid3">
+        <div class="kpi">
+          <div class="kpi-label">Waarde</div>
+          <div class="kpi-value">€ <span id="dashKpiValue">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Inleg</div>
+          <div class="kpi-value">€ <span id="dashKpiInvested">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Winst</div>
+          <div class="kpi-value">€ <span id="dashKpiProfit">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Winst %</div>
+          <div class="kpi-value"><span id="dashKpiProfitPct">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">CAGR</div>
+          <div class="kpi-value"><span id="dashKpiCagr">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="controls compact">
+          <div class="control">
+            <label>Benchmark</label>
+            <select id="dashBenchmark">
+              <option value="VWCE" selected>VWCE</option>
+              <option value="SPY">SPY</option>
+              <option value="">Geen</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>What changed?</label>
+            <div class="status" id="dashWhatChanged">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>Huidige selectie</h2>
+          <div class="kv">
+            <div class="k">Scenario</div><div class="v"><span id="dashScenario">—</span></div>
+            <div class="k">Startinleg</div><div class="v">€ <span id="dashInitial">0</span></div>
+            <div class="k">Maandinleg</div><div class="v">€ <span id="dashMonthly">0</span></div>
+            <div class="k">Horizon</div><div class="v"><span id="dashYears">—</span> jaar</div>
+          </div>
+          <div class="divider"></div>
+          <div class="kpi-row">
+            <div class="kpi">
+              <div class="kpi-label">Projected eindwaarde (base)</div>
+              <div class="kpi-value">€ <span id="kpiEndBase">—</span></div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Projected winst (base)</div>
+              <div class="kpi-value">€ <span id="kpiProfitBase">—</span></div>
+            </div>
+          </div>
+          <p class="muted">
+            Projecties zijn modelmatig (aannames per asset class). Geen garantie.
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>Winstgrafiek (projectie)</h2>
+          <div class="chart-wrap">
+            <canvas id="profitChart" height="220"></canvas>
+          </div>
+          <div class="legend">
+            <span class="dot invested"></span> Ingelegd
+            <span class="dot base"></span> Base
+            <span class="dot low"></span> Low
+            <span class="dot high"></span> High
+            <span class="dot actual"></span> Eigen portfolio (snapshots)
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Snelle start</h2>
+        <ol class="steps">
+          <li>Ga naar <strong>Portfolio Builder</strong> en kies scenario + bedragen.</li>
+          <li>Klik <strong>Haal koersen op</strong> om prijzen te vullen (via server-proxy).</li>
+          <li>Ga naar <strong>Eigen portfolio</strong> om je holdings/shares in te vullen en winst te tracken.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="view-builder" class="view hidden">
+      <div class="card">
+        <h2>Portfolio Builder</h2>
+        <div class="controls">
+          <div class="control">
+            <label>Horizon</label>
+            <select id="selYears">
+              <option value="5">5 jaar</option>
+              <option value="10" selected>10 jaar</option>
+              <option value="20">20 jaar</option>
+            </select>
+            <div class="inline" style="margin-top:8px; gap:8px; align-items:center;">
+              <input id="inpYearsCustom" type="number" min="1" max="40" step="1" placeholder="of eigen (jaren)" />
+              <span class="muted">laat leeg voor 5/10/20</span>
+            </div>
+          </div>
+          <div class="control">
+            <label>Risico</label>
+            <select id="selRisk">
+              <option value="L">Laag</option>
+              <option value="M" selected>Midden</option>
+              <option value="H">Hoog</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>Waarden</label>
+            <select id="selValues">
+              <option value="No" selected>Uit</option>
+              <option value="Yes">Aan</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>Regio-universum</label>
+            <select id="selRegion">
+              <option value="ALL" selected>All (US+EU+Overig)</option>
+              <option value="US">US</option>
+              <option value="EU">EU</option>
+              <option value="OTHER">Overig</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>Startinleg (€)</label>
+            <input id="inpInitial" type="number" min="0" step="100" value="10000"/>
+          </div>
+          <div class="control">
+            <label>Maandinleg (€)</label>
+            <input id="inpMonthly" type="number" min="0" step="50" value="500"/>
+          </div>
+          <div class="control">
+            <label>Hele aandelen afronden</label>
+            <select id="selRounding">
+              <option value="whole" selected>Ja (hele aandelen)</option>
+              <option value="fractional">Nee (fractioneel)</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>Transactiekosten</label>
+            <div class="inline">
+              <input id="inpFee" type="number" min="0" step="0.5" value="1.00" />
+              <span class="muted">€ / trade</span>
+            </div>
+            <div class="inline">
+              <input id="inpSlip" type="number" min="0" step="0.01" value="0.10" />
+              <span class="muted">% slippage</span>
+            </div>
+          </div>
+          <div class="control btns">
+            <button id="btnBuild" class="primary">Bouw portefeuille</button>
+            <button id="btnFetchPrices" class="secondary">Haal koersen op</button>
+            <button id="btnExportCSV" class="secondary">Export CSV</button>
+            <button id="btnExportXLS" class="secondary">Export Excel</button>
+          </div>
+        </div>
+
+        <div class="status" id="builderStatus">—</div>
+        <div class="status" id="builderQuality">LIVE: — | CACHED: — | MANUAL: — | MISSING: —</div>
+
+        <div class="divider"></div>
+        <h3>Custom ticker toevoegen</h3>
+        <div class="inline" style="gap:10px; align-items:flex-end; flex-wrap:wrap;">
+          <div class="control" style="min-width:240px;">
+            <label>Ticker</label>
+            <input id="inpAddTicker" placeholder="bv. TSLA of RHM.DE" />
+          </div>
+          <button id="btnAddTicker" class="secondary">Toevoegen</button>
+        </div>
+        <div id="customTickerChips" class="chips"></div>
+        <p class="muted">Custom tickers draaien mee in de aandelen-sleeve (1B). Verwijderen kan via het kruisje.</p>
+
+        <div class="divider"></div>
+        <h3>Scenario presets</h3>
+        <div class="controls compact">
+          <div class="control btns">
+            <button class="secondary preset-btn" data-years="5" data-risk="L">Defensief 5Y</button>
+            <button class="secondary preset-btn" data-years="10" data-risk="M">Balanced 10Y</button>
+            <button class="secondary preset-btn" data-years="20" data-risk="H">Offensief 20Y</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Asset mix</h3>
+          <div class="kv">
+            <div class="k">Equity</div><div class="v"><span id="mixEquity">—</span>%</div>
+            <div class="k">Bonds</div><div class="v"><span id="mixBonds">—</span>%</div>
+            <div class="k">Cash</div><div class="v"><span id="mixCash">—</span>%</div>
+          </div>
+          <p class="muted">De Builder gebruikt ETF-core + aandelen-satellite om spreiding te houden.</p>
+        </div>
+
+        <div class="card">
+          <h3>Samenvatting</h3>
+          <div class="kv">
+            <div class="k">Totaal ingelegd (horizon)</div><div class="v">€ <span id="sumInvested">—</span></div>
+            <div class="k">Projected eindwaarde (base)</div><div class="v">€ <span id="sumEndBase">—</span></div>
+            <div class="k">Projected winst (base)</div><div class="v">€ <span id="sumProfitBase">—</span></div>
+            <div class="k">Cash remainder (na afronden)</div><div class="v">€ <span id="sumCash">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Holdings</h3>
+        <div class="controls compact">
+          <div class="control">
+            <label>Filter holdings</label>
+            <input id="builderHoldingsFilter" placeholder="Zoek ticker/naam" />
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="tblHoldings">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Naam</th>
+                <th>Type</th>
+                <th>Weight</th>
+                <th>Koers</th>
+                <th>Alloc €</th>
+                <th>Aantal</th>
+                <th>Waarde €</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted">Tip: klik op een ticker voor een koersgrafiek (tab “Grafieken” of klik in de tabel).</p>
+      </div>
+    </section>
+
+    <section id="view-myportfolio" class="view hidden">
+      <div class="card">
+        <h2>Eigen portfolio (winst bijhouden)</h2>
+        <p class="muted">
+          Vul je actuele holdings (aantallen) in. De app haalt koersen op via de server en berekent huidige waarde + winst.
+          Je ziet ook een winstgrafiek (projectie + huidig punt).
+        </p>
+
+        <div class="controls">
+          <div class="control">
+            <label>Startdatum</label>
+            <input id="mpStartDate" type="date"/>
+          </div>
+          <div class="control">
+            <label>Startinleg (€)</label>
+            <input id="mpInitial" type="number" min="0" step="100" value="10000"/>
+          </div>
+          <div class="control">
+            <label>Maandinleg (€)</label>
+            <input id="mpMonthly" type="number" min="0" step="50" value="500"/>
+          </div>
+          <div class="control btns">
+            <button id="mpLoadFromBuilder" class="secondary">Neem holdings uit Builder</button>
+            <button id="mpFetchPrices" class="secondary">Haal koersen op</button>
+            <button id="mpSave" class="primary">Bereken & bewaar</button>
+            <button id="mpSaveSnapshot" class="secondary">Sla snapshot op</button>
+            <button id="mpExportXLSX" class="secondary">Export Excel</button>
+          </div>
+          <div class="control">
+            <label>Status</label>
+            <div class="status" id="mpStatus">—</div>
+          </div>
+        </div>
+
+        <div class="grid3">
+          <div class="kpi">
+            <div class="kpi-label">Totaal ingelegd</div>
+            <div class="kpi-value">€ <span id="mpInvested">—</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Huidige waarde</div>
+            <div class="kpi-value">€ <span id="mpValue">—</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Winst</div>
+            <div class="kpi-value">€ <span id="mpProfit">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Mijn holdings</h3>
+        <div class="controls compact">
+          <div class="control">
+            <label>Filter holdings</label>
+            <input id="mpHoldingsFilter" placeholder="Zoek ticker/naam" />
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="tblMyHoldings">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Naam</th>
+                <th>Koers</th>
+                <th>Aantal</th>
+                <th>Waarde</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted">Koersen: server-proxy → cache → anders handmatig prijs invullen in Instellingen.</p>
+      </div>
+
+      <div class="card">
+        <h3>Snapshots</h3>
+        <div class="table-wrap small">
+          <table class="table" id="tblSnapshots">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Inleg</th>
+                <th>Waarde</th>
+                <th>Winst</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="view-rebalance" class="view hidden">
+      <div class="card">
+        <h2>Rebalance</h2>
+        <p class="muted">
+          Vergelijk jouw actuele holdings (aantallen) met de target-portefeuille uit <strong>Portfolio Builder</strong>.
+          Vul je huidige aantallen in (of laad ze uit “Eigen portfolio”) en genereer een trade-lijst.
+        </p>
+
+        <div class="controls">
+          <div class="control">
+            <label>Cash (€)</label>
+            <input id="rebCash" type="number" min="0" step="10" value="0"/>
+          </div>
+
+          <div class="control">
+            <label>Min drift (%)</label>
+            <input id="rebMinDriftPct" type="number" min="0" step="0.1" value="2"/>
+          </div>
+
+          <div class="control">
+            <label>Min trade (€)</label>
+            <input id="rebMinTradeEur" type="number" min="0" step="5" value="25"/>
+          </div>
+
+          <div class="control">
+            <label>Kosten meenemen</label>
+            <div class="inline" style="gap:10px; align-items:center;">
+              <input id="rebUseCosts" type="checkbox" checked />
+              <span class="muted">fee + slippage</span>
+            </div>
+          </div>
+
+          <div class="control btns">
+            <button id="rebLoadFromMy" class="secondary">Laad aantallen uit Eigen portfolio</button>
+            <button id="rebGenerate" class="primary">Genereer trades</button>
+            <button id="rebExportCSV" class="secondary">Export trades CSV</button>
+            <button id="rebExportXLS" class="secondary">Export trades Excel</button>
+          </div>
+          <div class="control">
+            <label>Status</label>
+            <div class="status" id="rebStatus">—</div>
+          </div>
+        </div>
+
+        <div class="grid3">
+          <div class="kpi">
+            <div class="kpi-label">Totale waarde (incl. cash)</div>
+            <div class="kpi-value">€ <span id="rebTotalValue">—</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Netto buy/sell</div>
+            <div class="kpi-value">€ <span id="rebNet">—</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Aantal trades</div>
+            <div class="kpi-value"><span id="rebTrades">—</span></div>
+          </div>
+        </div>
+
+        <div class="grid3" style="margin-top:12px;">
+          <div class="kpi">
+            <div class="kpi-label">Fees (schatting)</div>
+            <div class="kpi-value">€ <span id="rebFees">—</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Slippage (schatting)</div>
+            <div class="kpi-value">€ <span id="rebSlip">—</span></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Net cash (incl. kosten)</div>
+            <div class="kpi-value">€ <span id="rebNetCash">—</span></div>
+          </div>
+        </div>
+
+        <div class="status" id="rebImpactSummary">Impact: —</div>
+        <p class="muted" style="margin-top:10px;">Kosten komen uit Builder: fee €<span id="rebFeeView">—</span> per trade, slippage <span id="rebSlipView">—</span>%.</p>
+      </div>
+
+      <div class="card">
+        <h3>Trade-lijst</h3>
+        <div class="table-wrap">
+          <table class="table" id="tblRebalance">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Target %</th>
+                <th>Koers</th>
+                <th>Huidig aantal</th>
+                <th>Huidig €</th>
+                <th>Target €</th>
+                <th>Drift €</th>
+                <th>Actie</th>
+                <th>Trade aantal</th>
+                <th>Trade €</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted">Trades zijn een schatting op basis van koersen en afrondingsinstellingen in de Builder.</p>
+      </div>
+    </section>
+
+
+    <section id="view-quotes" class="view hidden">
+      <div class="card">
+        <h2>Koersen</h2>
+        <div class="controls">
+          <div class="control">
+            <label>Universum</label>
+            <select id="qRegion">
+              <option value="ALL" selected>All</option>
+              <option value="US">US</option>
+              <option value="EU">EU</option>
+              <option value="OTHER">Overig</option>
+              <option value="ETF">ETF’s</option>
+            </select>
+          </div>
+          <div class="control" style="min-width:180px;">
+            <label>Zoeken</label>
+            <input id="qSearch" placeholder="Ticker of naam" />
+          </div>
+          <div class="control" style="min-width:220px;">
+            <label>Bulk tickers</label>
+            <textarea id="qBulkAdd" rows="2" placeholder="bv. MSFT, AAPL, VUAA"></textarea>
+          </div>
+          <div class="control btns">
+            <button id="qBulkAddBtn" class="secondary">Toevoegen</button>
+          </div>
+          <div class="control">
+            <label>Status filter</label>
+            <select id="qStatusFilter">
+              <option value="ALL" selected>Alles</option>
+              <option value="LIVE">Live</option>
+              <option value="CACHED">Cached</option>
+              <option value="MANUAL">Handmatig</option>
+              <option value="MISSING">Ontbreekt</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>Sorteren</label>
+            <select id="qSort">
+              <option value="ticker" selected>Ticker</option>
+              <option value="name">Naam</option>
+              <option value="industry">Industrie</option>
+              <option value="status">Status</option>
+              <option value="price">Koers</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>Tabel dichtheid</label>
+            <select id="qDensity">
+              <option value="compact" selected>Compact</option>
+              <option value="comfort">Comfort</option>
+            </select>
+          </div>
+          <div class="control btns">
+            <button id="qFetch" class="primary">Haal koersen op</button>
+            <button id="qClearCache" class="secondary">Wis cache</button>
+          </div>
+          <div class="control">
+            <label>Status</label>
+            <div class="status" id="qStatus">—</div>
+          </div>
+          <div class="control">
+            <label>Laatst bijgewerkt</label>
+            <div class="status" id="qLastUpdated">—</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="tblQuotes">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Naam</th>
+                <th>Regio</th>
+                <th>Type</th>
+                <th>Industrie</th>
+                <th>Koers</th>
+                <th>Status</th>
+                <th>Bron/Age</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-upcoming" class="view hidden">
+      <div class="card">
+        <h2>Up & Coming</h2>
+        <p class="muted">Combinatie van curated picks + rules-based momentum. Voeg toe aan je universum of gebruik ze als ideeënbank.</p>
+
+        <div class="controls">
+          <div class="control">
+            <label>Weergave</label>
+            <select id="uMode">
+              <option value="CURATED" selected>Curated</option>
+              <option value="MOMENTUM">Momentum (best effort)</option>
+              <option value="ALL">Alles</option>
+            </select>
+          </div>
+          <div class="control btns">
+            <button id="uRefresh" class="primary">Vernieuw lijst</button>
+          </div>
+          <div class="control">
+            <label>Status</label>
+            <div class="status" id="uStatus">—</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="tblUpcoming">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Naam</th>
+                <th>Regio</th>
+                <th>Tags</th>
+                <th>Actie</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view hidden">
+      <div class="card">
+        <h2>Instellingen</h2>
+        <div class="grid2">
+          <div class="card inner">
+            <h3>Waarden (filters)</h3>
+            <p class="muted">Deze tags worden uitgesloten als Waarden = Aan. Je kunt uitzonderingen toevoegen.</p>
+            <div class="checklist">
+              <label><input type="checkbox" class="exclTag" value="DEFENSE" checked> DEFENSE</label>
+              <label><input type="checkbox" class="exclTag" value="FOSSIL" checked> FOSSIL</label>
+              <label><input type="checkbox" class="exclTag" value="TOBACCO" checked> TOBACCO</label>
+              <label><input type="checkbox" class="exclTag" value="GAMBLING" checked> GAMBLING</label>
+            </div>
+          </div>
+
+          <div class="card inner">
+            <h3>Handmatige prijzen (fallback)</h3>
+            <p class="muted">Als een koers niet opgehaald kan worden, gebruikt de app deze overrides.</p>
+            <div class="controls">
+              <div class="control">
+                <label>Ticker</label>
+                <input id="manTicker" placeholder="bv. MSFT" />
+              </div>
+              <div class="control">
+                <label>Prijs</label>
+                <input id="manPrice" type="number" step="0.01" />
+              </div>
+              <div class="control btns">
+                <button id="btnSaveManual" class="primary">Opslaan</button>
+                <button id="btnClearManual" class="secondary">Wissen</button>
+              </div>
+            </div>
+            <div class="table-wrap small">
+              <table class="table" id="tblManual">
+                <thead><tr><th>Ticker</th><th>Prijs</th><th></th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card inner">
+            <h3>Updates & grafieken</h3>
+            <p class="muted">Schakel automatische koers-updates en grafiekvulling naar wens in of uit.</p>
+            <div class="checklist">
+              <label><input type="checkbox" id="autoRefreshToggle"> Auto-refresh koersen (elke 5s)</label>
+              <label>Interval (sec): <input type="number" id="autoRefreshInterval" min="5" max="120" step="5" style="width:90px"></label>
+              <label><input type="checkbox" id="chartFillToggle"> Vulling onder grafieken tonen</label>
+              <label>Tabel dichtheid:
+                <select id="tableDensity">
+                  <option value="compact" selected>Compact</option>
+                  <option value="comfort">Comfort</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="card inner">
+            <h3>Export/Import instellingen</h3>
+            <p class="muted">Maak een backup van je instellingen of zet ze over.</p>
+            <div class="controls">
+              <div class="control btns">
+                <button id="settingsExport" class="secondary">Exporteer JSON</button>
+                <label class="secondary" style="padding:10px 14px;border-radius:14px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+                  Import JSON
+                  <input id="settingsImport" type="file" accept="application/json" style="display:none" />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chart modal -->
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title" id="modalTitle">—</div>
+            <div class="modal-sub" id="modalSub">—</div>
+          </div>
+          <button id="modalClose" class="icon-btn" type="button" aria-label="Sluiten">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="controls compact">
+            <div class="control">
+              <label>Periode</label>
+              <select id="histRange">
+                <option value="1y">1Y</option>
+                <option value="3y" selected>3Y</option>
+                <option value="5y">5Y</option>
+                <option value="max">MAX</option>
+              </select>
+            </div>
+            <div class="control">
+              <label>Benchmark</label>
+              <select id="histBench">
+                <option value="">Geen</option>
+                <option value="VWCE">VWCE (proxy)</option>
+                <option value="SPY">SPY (proxy)</option>
+              </select>
+            </div>
+            <div class="control">
+              <label>Schaal</label>
+              <select id="histScale">
+                <option value="linear" selected>Linear</option>
+                <option value="log">Log</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="chart-wrap">
+            <canvas id="histChart" height="240"></canvas>
+          </div>
+          <div class="kv">
+            <div class="k">Max drawdown</div><div class="v"><span id="mdd">—</span></div>
+            <div class="k">Periode</div><div class="v"><span id="histPeriod">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
