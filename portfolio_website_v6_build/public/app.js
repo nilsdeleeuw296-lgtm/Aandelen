@@ -185,6 +185,7 @@ function loadSettings(){
   if(typeof s.autoRefreshEnabled !== 'boolean') s.autoRefreshEnabled = true;
   if(!s.autoRefreshIntervalSec || s.autoRefreshIntervalSec < 5) s.autoRefreshIntervalSec = 5;
   if(typeof s.chartFillEnabled !== 'boolean') s.chartFillEnabled = true;
+  if(!s.tableDensity) s.tableDensity = 'compact';
   return s;
 }
 function saveSettings(s){ writeJSON(STORAGE.settings, s); }
@@ -1029,7 +1030,14 @@ function regionFilter(sec, region){
 async function renderQuotesTable(){
   const region = $('qRegion').value;
   const statusFilter = $('qStatusFilter') ? $('qStatusFilter').value : 'ALL';
+  const search = $('qSearch') ? $('qSearch').value.trim().toUpperCase() : '';
+  const density = $('qDensity') ? $('qDensity').value : 'compact';
   const tbody = $('tblQuotes').querySelector('tbody');
+  const table = $('tblQuotes');
+  if(table){
+    table.classList.remove('compact','comfort');
+    table.classList.add(density);
+  }
   tbody.innerHTML = '';
   const manual = loadManualPrices();
   const settings = loadSettings();
@@ -1037,6 +1045,11 @@ async function renderQuotesTable(){
 
   const list = SECURITIES.filter(s => regionFilter(s, region));
   for(const s of list){
+    if(search){
+      const needle = search;
+      const hay = `${s.ticker} ${s.name}`.toUpperCase();
+      if(!hay.includes(needle)) continue;
+    }
     const liveEntry = builder.prices[s.ticker] || myp.prices[s.ticker] || null;
     const pLive = liveEntry?.price ?? null;
     const pMan = manual[s.ticker] ?? null;
@@ -1058,12 +1071,29 @@ async function renderQuotesTable(){
       <td ${muted}>${s.type}</td>
       <td ${muted}>${price!=null ? fmt2.format(price) : '—'}</td>
       <td ${muted}>${badge(status)}</td>
-      <td ${muted}>${source} · ${age}</td>
+      <td ${muted}>${source} · ${age} <button class="secondary qRetry" data-ticker="${s.ticker}" style="padding:4px 8px;border-radius:10px;margin-left:6px">↻</button></td>
     `;
     tbody.appendChild(tr);
   }
 
   attachTickerLinks();
+  qsa('.qRetry', tbody).forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const t = btn.dataset.ticker;
+      if(!t) return;
+      $('qStatus').textContent = `Koers ophalen voor ${t}…`;
+      try{
+        const res = await fetchPricesForHoldings([{ticker:t}]);
+        builder.prices = {...builder.prices, ...(res.prices||{})};
+        myp.prices = {...myp.prices, ...(res.prices||{})};
+        saveBuilder(); saveMyPortfolio();
+        renderQuotesTable();
+        $('qStatus').textContent = `Koers bijgewerkt: ${t}.`;
+      }catch(e){
+        $('qStatus').textContent = `Fout bij ${t}: ${e.message}`;
+      }
+    });
+  });
 }
 
 async function qFetch(){
@@ -1193,6 +1223,17 @@ function renderManualTable(){
       saveSettings(s);
       updateDashboard();
       renderHistoryChart();
+    };
+  }
+
+  const densitySelect = $('qDensity');
+  if(densitySelect){
+    densitySelect.value = settings.tableDensity || 'compact';
+    densitySelect.onchange = () => {
+      const s = loadSettings();
+      s.tableDensity = densitySelect.value;
+      saveSettings(s);
+      renderQuotesTable();
     };
   }
 }
@@ -1943,6 +1984,7 @@ if(btnAdd){
   $('qRegion').addEventListener('change', renderQuotesTable);
   if($('qStatusFilter')) $('qStatusFilter').addEventListener('change', renderQuotesTable);
   if($('qBulkAddBtn')) $('qBulkAddBtn').addEventListener('click', bulkAddTickers);
+  if($('qSearch')) $('qSearch').addEventListener('input', renderQuotesTable);
 
 // rebalance
 if($('rebGenerate')){

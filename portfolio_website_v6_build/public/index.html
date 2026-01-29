@@ -404,6 +404,10 @@
               <option value="ETF">ETF’s</option>
             </select>
           </div>
+          <div class="control" style="min-width:180px;">
+            <label>Zoeken</label>
+            <input id="qSearch" placeholder="Ticker of naam" />
+          </div>
           <div class="control" style="min-width:220px;">
             <label>Bulk tickers</label>
             <textarea id="qBulkAdd" rows="2" placeholder="bv. MSFT, AAPL, VUAA"></textarea>
@@ -419,6 +423,13 @@
               <option value="CACHED">Cached</option>
               <option value="MANUAL">Handmatig</option>
               <option value="MISSING">Ontbreekt</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>Tabel dichtheid</label>
+            <select id="qDensity">
+              <option value="compact" selected>Compact</option>
+              <option value="comfort">Comfort</option>
             </select>
           </div>
           <div class="control btns">

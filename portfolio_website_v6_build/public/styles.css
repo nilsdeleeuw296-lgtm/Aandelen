@@ -114,6 +114,10 @@ button.secondary:hover{border-color:rgba(255,255,255,.22);background:rgba(255,25
 .table thead th{position:sticky;top:0;background:rgba(13,16,32,.78);backdrop-filter: blur(14px);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);text-align:left;padding:10px;font-weight:900;z-index:2}
 .table tbody td{border-bottom:1px solid var(--border);padding:10px;font-size:13px;font-weight:700;vertical-align:middle}
 .table tbody tr:hover{background:rgba(255,255,255,.05)}
+.table.compact thead th{padding:8px}
+.table.compact tbody td{padding:8px;font-size:12px}
+.table.comfort thead th{padding:12px}
+.table.comfort tbody td{padding:12px;font-size:14px}
 .badge{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted);font-weight:900;background:rgba(255,255,255,.03)}
 .badge.ok{border-color:rgba(16,185,129,.35);color:#6ee7b7;background:rgba(16,185,129,.08)}
 .badge.warn{border-color:rgba(245,158,11,.35);color:#fcd34d;background:rgba(245,158,11,.08)}
