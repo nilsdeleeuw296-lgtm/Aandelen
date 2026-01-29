@@ -186,6 +186,7 @@ function loadSettings(){
   if(!s.autoRefreshIntervalSec || s.autoRefreshIntervalSec < 5) s.autoRefreshIntervalSec = 5;
   if(typeof s.chartFillEnabled !== 'boolean') s.chartFillEnabled = true;
   if(!s.tableDensity) s.tableDensity = 'compact';
+  if(typeof s.benchmarkSymbol !== 'string') s.benchmarkSymbol = 'VWCE';
   return s;
 }
 function saveSettings(s){ writeJSON(STORAGE.settings, s); }
@@ -553,7 +554,19 @@ function renderBuilder(){
   // table
   const tbody = $('tblHoldings').querySelector('tbody');
   tbody.innerHTML = '';
+  const filter = $('builderHoldingsFilter') ? $('builderHoldingsFilter').value.trim().toUpperCase() : '';
+  const settings = loadSettings();
+  const table = $('tblHoldings');
+  if(table){
+    table.classList.remove('compact','comfort');
+    table.classList.add(settings.tableDensity || 'compact');
+  }
+  const counts = { LIVE:0, CACHED:0, MANUAL:0, MISSING:0 };
   for(const h of builder.holdings){
+    const hay = `${h.ticker} ${h.name}`.toUpperCase();
+    if(filter && !hay.includes(filter)) continue;
+    const status = h.priceStatus || '—';
+    if(counts[status] != null) counts[status] += 1;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><a href="#" class="ticker-link" data-ticker="${h.ticker}">${h.ticker}</a></td>
@@ -564,9 +577,13 @@ function renderBuilder(){
       <td>${fmtEUR.format(h.alloc)}</td>
       <td>${builder.rounding==='whole' ? fmtEUR.format(h.shares) : fmt2.format(h.shares)}</td>
       <td>${fmtEUR.format(h.value||0)}</td>
-      <td>${badge(h.priceStatus || '—')}</td>
+      <td>${badge(status)}</td>
     `;
     tbody.appendChild(tr);
+  }
+  const quality = $('builderQuality');
+  if(quality){
+    quality.textContent = `LIVE: ${counts.LIVE} | CACHED: ${counts.CACHED} | MANUAL: ${counts.MANUAL} | MISSING: ${counts.MISSING}`;
   }
 
   // update dashboard summary
@@ -761,6 +778,7 @@ let myp = {
   holdings: [], // {ticker, shares}
   prices: {},
 };
+let lastMyTotals = { invested: 0, value: 0, profit: 0 };
 
 function loadMyPortfolio(){
   const m = readJSON(STORAGE.myportfolio, null);
@@ -795,6 +813,25 @@ function addSnapshot(dateISO, invested, value){
   saveSnapshots(arr);
 }
 
+function renderSnapshots(){
+  const tbody = $('tblSnapshots')?.querySelector('tbody');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  const snaps = loadSnapshots();
+  const rows = snaps.slice(-12).reverse();
+  for(const s of rows){
+    const profit = Number(s.value||0) - Number(s.invested||0);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${s.date}</td>
+      <td>${fmtEUR.format(Number(s.invested||0))}</td>
+      <td>${fmtEUR.format(Number(s.value||0))}</td>
+      <td>${fmtEUR.format(profit)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
 function mypInputs(){
   myp.startDate = $('mpStartDate').value;
   myp.initial = Number($('mpInitial').value || 0);
@@ -808,9 +845,20 @@ function renderMyHoldings(){
   tbody.innerHTML = '';
   const manual = loadManualPrices();
   let totalValue = 0;
+  const filter = $('mpHoldingsFilter') ? $('mpHoldingsFilter').value.trim().toUpperCase() : '';
+  const settings = loadSettings();
+  const table = $('tblMyHoldings');
+  if(table){
+    table.classList.remove('compact','comfort');
+    table.classList.add(settings.tableDensity || 'compact');
+  }
 
   for(const h of myp.holdings){
     const sec = getSecurityByTicker(h.ticker) || {name:h.ticker};
+    if(filter){
+      const hay = `${h.ticker} ${sec.name}`.toUpperCase();
+      if(!hay.includes(filter)) continue;
+    }
     const pLive = myp.prices[h.ticker]?.price ?? null;
     const pMan = manual[h.ticker] ?? null;
     const price = (pLive!=null ? pLive : (pMan!=null ? Number(pMan) : null));
@@ -850,6 +898,7 @@ function renderMyHoldings(){
   $('mpInvested').textContent = fmtEUR.format(invested);
   $('mpValue').textContent = fmtEUR.format(totalValue);
   $('mpProfit').textContent = fmtEUR.format(profit);
+  lastMyTotals = { invested, value: totalValue, profit };
 
   updateDashboard();
 }
@@ -1014,6 +1063,10 @@ function mpSave(){
   mypInputs();
   saveMyPortfolio();
   renderMyHoldings();
+  if(lastMyTotals.value){
+    addSnapshot(new Date().toISOString().slice(0,10), lastMyTotals.invested, lastMyTotals.value);
+    renderSnapshots();
+  }
   setMPStatus('Berekening uitgevoerd en opgeslagen.');
 }
 
@@ -1155,6 +1208,12 @@ function renderManualTable(){
   const tbody = $('tblManual').querySelector('tbody');
   tbody.innerHTML = '';
   const p = loadManualPrices();
+  const settings = loadSettings();
+  const table = $('tblManual');
+  if(table){
+    table.classList.remove('compact','comfort');
+    table.classList.add(settings.tableDensity || 'compact');
+  }
   for(const [t,price] of Object.entries(p)){
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -1177,7 +1236,6 @@ function renderManualTable(){
   });
 
   // excluded tags checkboxes
-  const settings = loadSettings();
   qsa('.exclTag').forEach(chk=>{
     chk.checked = (settings.excludedTags||[]).includes(chk.value);
     chk.addEventListener('change', ()=>{
@@ -1227,14 +1285,24 @@ function renderManualTable(){
   }
 
   const densitySelect = $('qDensity');
+  const globalDensity = $('tableDensity');
+  if(densitySelect) densitySelect.value = settings.tableDensity || 'compact';
+  if(globalDensity) globalDensity.value = settings.tableDensity || 'compact';
+  const updateDensity = (val) => {
+    const s = loadSettings();
+    s.tableDensity = val;
+    saveSettings(s);
+    renderBuilder();
+    renderMyHoldings();
+    renderRebalance();
+    renderQuotesTable();
+    renderUpcoming();
+  };
   if(densitySelect){
-    densitySelect.value = settings.tableDensity || 'compact';
-    densitySelect.onchange = () => {
-      const s = loadSettings();
-      s.tableDensity = densitySelect.value;
-      saveSettings(s);
-      renderQuotesTable();
-    };
+    densitySelect.onchange = () => updateDensity(densitySelect.value);
+  }
+  if(globalDensity){
+    globalDensity.onchange = () => updateDensity(globalDensity.value);
   }
 }
 
@@ -1259,6 +1327,40 @@ function clearManual(){
   updateDashboard();
 }
 
+function exportSettings(){
+  const payload = {
+    settings: loadSettings(),
+    manualPrices: loadManualPrices(),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'portfolio_settings.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importSettingsFile(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const payload = JSON.parse(reader.result);
+      if(payload.settings) saveSettings(payload.settings);
+      if(payload.manualPrices) saveManualPrices(payload.manualPrices);
+      renderManualTable();
+      renderBuilder();
+      renderMyHoldings();
+      renderQuotesTable();
+      renderUpcoming();
+      updateDashboard();
+      setBuilderStatus('Instellingen geïmporteerd.');
+    }catch(e){
+      setBuilderStatus(`Import fout: ${e.message}`);
+    }
+  };
+  reader.readAsText(file);
+}
+
 /** ---------------------------------------------------------
  * Upcoming
  * ---------------------------------------------------------- */
@@ -1267,6 +1369,12 @@ function renderUpcoming(){
   const mode = $('uMode').value;
   const tbody = $('tblUpcoming').querySelector('tbody');
   tbody.innerHTML='';
+  const settings = loadSettings();
+  const table = $('tblUpcoming');
+  if(table){
+    table.classList.remove('compact','comfort');
+    table.classList.add(settings.tableDensity || 'compact');
+  }
   let list = [];
   if(mode==='CURATED') list = UPCOMING_CURATED;
   if(mode==='MOMENTUM') list = UPCOMING_MOMENTUM;
@@ -1430,6 +1538,32 @@ function updateDashboard(){
   $('dashYears').textContent = builder.years;
   if(lastBuilderUpdate){
     $('dashScenario').textContent += ` • bijgewerkt ${lastBuilderUpdate}`;
+  }
+
+  $('dashKpiValue').textContent = fmtEUR.format(lastMyTotals.value || 0);
+  $('dashKpiInvested').textContent = fmtEUR.format(lastMyTotals.invested || 0);
+  $('dashKpiProfit').textContent = fmtEUR.format(lastMyTotals.profit || 0);
+  const profitPct = lastMyTotals.invested ? (lastMyTotals.profit / lastMyTotals.invested) * 100 : null;
+  $('dashKpiProfitPct').textContent = profitPct != null ? `${fmt1.format(profitPct)}%` : '—';
+  const months = monthsBetween(myp.startDate, new Date().toISOString().slice(0,10));
+  const years = months / 12;
+  const cagr = (lastMyTotals.invested > 0 && lastMyTotals.value > 0 && years > 0)
+    ? (Math.pow(lastMyTotals.value / lastMyTotals.invested, 1/years) - 1) * 100
+    : null;
+  $('dashKpiCagr').textContent = cagr != null ? `${fmt1.format(cagr)}%` : '—';
+
+  const snaps = loadSnapshots();
+  const whatChanged = $('dashWhatChanged');
+  if(whatChanged){
+    if(snaps.length >= 2){
+      const last = snaps[snaps.length - 1];
+      const prev = snaps[snaps.length - 2];
+      const delta = Number(last.value||0) - Number(prev.value||0);
+      const pct = prev.value ? (delta / prev.value) * 100 : 0;
+      whatChanged.textContent = `${last.date}: ${fmtEUR.format(delta)} (${fmt1.format(pct)}%)`;
+    }else{
+      whatChanged.textContent = 'Nog geen snapshots';
+    }
   }
 
   const proj = projectPortfolio({years: builder.years, risk: builder.risk, initial: builder.initial, monthly: builder.monthly});
@@ -1833,6 +1967,12 @@ function computeRebalance(){
 function renderRebalance(){
   const tbody = $('tblRebalance')?.querySelector('tbody');
   if(!tbody) return;
+  const settings = loadSettings();
+  const table = $('tblRebalance');
+  if(table){
+    table.classList.remove('compact','comfort');
+    table.classList.add(settings.tableDensity || 'compact');
+  }
 
   if(!builder.holdings || !builder.holdings.length){
     tbody.innerHTML = '<tr><td colspan="10" class="muted">Bouw eerst een portefeuille in Portfolio Builder.</td></tr>';
@@ -1849,6 +1989,9 @@ function renderRebalance(){
   if($('rebNetCash')) $('rebNetCash').textContent = fmtEUR.format(netCash || 0);
   if($('rebFeeView')) $('rebFeeView').textContent = fmt2.format(builder.fee || 0);
   if($('rebSlipView')) $('rebSlipView').textContent = fmt2.format(builder.slip || 0);
+  if($('rebImpactSummary')){
+    $('rebImpactSummary').textContent = `Impact: netto ${fmtEUR.format(net || 0)}, fees ${fmtEUR.format(feeTotal || 0)}, slippage ${fmtEUR.format(slipTotal || 0)}.`;
+  }
 
   tbody.innerHTML = '';
   for(const r of rows){
@@ -1966,6 +2109,18 @@ if(btnAdd){
   });
 }
 
+qsa('.preset-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    $('selYears').value = String(btn.dataset.years || '10');
+    $('selRisk').value = String(btn.dataset.risk || 'M');
+    builderInputs();
+    renderBuilder();
+    setBuilderStatus('Preset toegepast.');
+  });
+});
+
+if($('builderHoldingsFilter')) $('builderHoldingsFilter').addEventListener('input', renderBuilder);
+
 
   // builder initial render
   renderBuilder();
@@ -1976,7 +2131,20 @@ if(btnAdd){
   $('mpLoadFromBuilder').addEventListener('click', mpLoadFromBuilder);
   $('mpFetchPrices').addEventListener('click', mpFetchPrices);
   $('mpSave').addEventListener('click', mpSave);
+  if($('mpSaveSnapshot')){
+    $('mpSaveSnapshot').addEventListener('click', ()=>{
+      if(!lastMyTotals.value){
+        setMPStatus('Geen waarde om te snapshotten.');
+        return;
+      }
+      addSnapshot(new Date().toISOString().slice(0,10), lastMyTotals.invested, lastMyTotals.value);
+      renderSnapshots();
+      updateDashboard();
+      setMPStatus('Snapshot opgeslagen.');
+    });
+  }
   $('mpExportXLSX').addEventListener('click', exportMyPortfolioExcel);
+  if($('mpHoldingsFilter')) $('mpHoldingsFilter').addEventListener('input', renderMyHoldings);
 
   // quotes
   $('qFetch').addEventListener('click', qFetch);
@@ -1985,6 +2153,18 @@ if(btnAdd){
   if($('qStatusFilter')) $('qStatusFilter').addEventListener('change', renderQuotesTable);
   if($('qBulkAddBtn')) $('qBulkAddBtn').addEventListener('click', bulkAddTickers);
   if($('qSearch')) $('qSearch').addEventListener('input', renderQuotesTable);
+  if($('qDensity')) $('qDensity').addEventListener('change', renderQuotesTable);
+
+  if($('dashBenchmark')){
+    const settings = loadSettings();
+    $('dashBenchmark').value = settings.benchmarkSymbol || 'VWCE';
+    $('dashBenchmark').addEventListener('change', ()=>{
+      const s = loadSettings();
+      s.benchmarkSymbol = $('dashBenchmark').value;
+      saveSettings(s);
+      updateDashboard();
+    });
+  }
 
 // rebalance
 if($('rebGenerate')){
@@ -2008,6 +2188,14 @@ if($('rebGenerate')){
   // settings manual prices
   $('btnSaveManual').addEventListener('click', saveManual);
   $('btnClearManual').addEventListener('click', clearManual);
+  if($('settingsExport')) $('settingsExport').addEventListener('click', exportSettings);
+  if($('settingsImport')){
+    $('settingsImport').addEventListener('change', (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(file) importSettingsFile(file);
+      e.target.value = '';
+    });
+  }
 
   // modal
   $('modalClose').addEventListener('click', closeModal);
@@ -2031,6 +2219,7 @@ if($('rebGenerate')){
   renderUpcoming();
   renderManualTable();
   renderMyHoldings();
+  renderSnapshots();
   updateDashboard();
 
   const settings = loadSettings();

@@ -30,6 +30,46 @@
   <main class="container">
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <section id="view-dashboard" class="view">
+      <div class="grid3">
+        <div class="kpi">
+          <div class="kpi-label">Waarde</div>
+          <div class="kpi-value">€ <span id="dashKpiValue">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Inleg</div>
+          <div class="kpi-value">€ <span id="dashKpiInvested">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Winst</div>
+          <div class="kpi-value">€ <span id="dashKpiProfit">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Winst %</div>
+          <div class="kpi-value"><span id="dashKpiProfitPct">—</span></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">CAGR</div>
+          <div class="kpi-value"><span id="dashKpiCagr">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="controls compact">
+          <div class="control">
+            <label>Benchmark</label>
+            <select id="dashBenchmark">
+              <option value="VWCE" selected>VWCE</option>
+              <option value="SPY">SPY</option>
+              <option value="">Geen</option>
+            </select>
+          </div>
+          <div class="control">
+            <label>What changed?</label>
+            <div class="status" id="dashWhatChanged">—</div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid2">
         <div class="card">
           <h2>Huidige selectie</h2>
@@ -155,6 +195,7 @@
         </div>
 
         <div class="status" id="builderStatus">—</div>
+        <div class="status" id="builderQuality">LIVE: — | CACHED: — | MANUAL: — | MISSING: —</div>
 
         <div class="divider"></div>
         <h3>Custom ticker toevoegen</h3>
@@ -168,6 +209,15 @@
         <div id="customTickerChips" class="chips"></div>
         <p class="muted">Custom tickers draaien mee in de aandelen-sleeve (1B). Verwijderen kan via het kruisje.</p>
 
+        <div class="divider"></div>
+        <h3>Scenario presets</h3>
+        <div class="controls compact">
+          <div class="control btns">
+            <button class="secondary preset-btn" data-years="5" data-risk="L">Defensief 5Y</button>
+            <button class="secondary preset-btn" data-years="10" data-risk="M">Balanced 10Y</button>
+            <button class="secondary preset-btn" data-years="20" data-risk="H">Offensief 20Y</button>
+          </div>
+        </div>
       </div>
 
       <div class="grid2">
@@ -194,6 +244,12 @@
 
       <div class="card">
         <h3>Holdings</h3>
+        <div class="controls compact">
+          <div class="control">
+            <label>Filter holdings</label>
+            <input id="builderHoldingsFilter" placeholder="Zoek ticker/naam" />
+          </div>
+        </div>
         <div class="table-wrap">
           <table class="table" id="tblHoldings">
             <thead>
@@ -241,6 +297,7 @@
             <button id="mpLoadFromBuilder" class="secondary">Neem holdings uit Builder</button>
             <button id="mpFetchPrices" class="secondary">Haal koersen op</button>
             <button id="mpSave" class="primary">Bereken & bewaar</button>
+            <button id="mpSaveSnapshot" class="secondary">Sla snapshot op</button>
             <button id="mpExportXLSX" class="secondary">Export Excel</button>
           </div>
           <div class="control">
@@ -267,6 +324,12 @@
 
       <div class="card">
         <h3>Mijn holdings</h3>
+        <div class="controls compact">
+          <div class="control">
+            <label>Filter holdings</label>
+            <input id="mpHoldingsFilter" placeholder="Zoek ticker/naam" />
+          </div>
+        </div>
         <div class="table-wrap">
           <table class="table" id="tblMyHoldings">
             <thead>
@@ -283,6 +346,23 @@
           </table>
         </div>
         <p class="muted">Koersen: server-proxy → cache → anders handmatig prijs invullen in Instellingen.</p>
+      </div>
+
+      <div class="card">
+        <h3>Snapshots</h3>
+        <div class="table-wrap small">
+          <table class="table" id="tblSnapshots">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Inleg</th>
+                <th>Waarde</th>
+                <th>Winst</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -361,6 +441,7 @@
           </div>
         </div>
 
+        <div class="status" id="rebImpactSummary">Impact: —</div>
         <p class="muted" style="margin-top:10px;">Kosten komen uit Builder: fee €<span id="rebFeeView">—</span> per trade, slippage <span id="rebSlipView">—</span>%.</p>
       </div>
 
@@ -552,6 +633,26 @@
               <label><input type="checkbox" id="autoRefreshToggle"> Auto-refresh koersen (elke 5s)</label>
               <label>Interval (sec): <input type="number" id="autoRefreshInterval" min="5" max="120" step="5" style="width:90px"></label>
               <label><input type="checkbox" id="chartFillToggle"> Vulling onder grafieken tonen</label>
+              <label>Tabel dichtheid:
+                <select id="tableDensity">
+                  <option value="compact" selected>Compact</option>
+                  <option value="comfort">Comfort</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="card inner">
+            <h3>Export/Import instellingen</h3>
+            <p class="muted">Maak een backup van je instellingen of zet ze over.</p>
+            <div class="controls">
+              <div class="control btns">
+                <button id="settingsExport" class="secondary">Exporteer JSON</button>
+                <label class="secondary" style="padding:10px 14px;border-radius:14px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+                  Import JSON
+                  <input id="settingsImport" type="file" accept="application/json" style="display:none" />
+                </label>
+              </div>
             </div>
           </div>
         </div>
